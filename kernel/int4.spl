@@ -1,0 +1,75 @@
+alias physicalSP S0;
+alias currpcb S1;
+alias fileDes S2;
+alias wordtp S3;
+alias seekpos S4;
+alias syswidept S5; //System wide pointer.
+alias basicBlock S6;
+alias blockIndex S7;
+
+physicalSP = ([PTBR + 2 * (SP / 512)] * 512) + SP % 512;
+
+//By substitution.
+currpcb = (PTBR - 1024) * 4 + 1536;
+fileDes = [physicalSP - 4];
+wordtp = [physicalSP - 3];
+
+if (fileDes > 7  || fileDes < 0) then
+    [physicalSP - 2] = -1;
+    ireturn;
+endif;
+    
+if ([currpcb + 15 + 2 * fileDes] == -1) then
+    [physicalSP - 2] = -1;
+    ireturn;
+endif;
+
+syswidept = [currpcb + 15 + 2 * fileDes];
+syswidept = FILE_TABLE + 2 * syswidept;
+
+seekpos = [currpcb + 16 + 2 * fileDes];
+basicBlock = [FAT + 8 * [syswidept] + 2];
+load (1, basicBlock);
+
+blockIndex = 512 + (seekpos / 512);
+//Write system call.
+if ([physicalSP - 1] == 5) then
+    if ([blockIndex] == -1) then
+        //Need a new block.
+        alias counter S8;
+        
+        counter = 24;
+        
+        while (counter < 448) do
+            if ([DISK_LIST + counter] == 0) then
+                break;
+            endif;
+            counter = counter + 1;
+        endwhile;
+        
+        if (counter == 448) then
+            [physicalSP - 2] = -1;
+            ireturn;
+        endif;
+        
+        [blockIndex] = counter;
+        [DISK_LIST + counter] = 1;
+        //Update the size.
+        [FAT + 8 * [syswidept] + 1] = [FAT + 8 * [syswidept] + 1] + 512;
+        store(1, basicBlock);
+        store(5, 19);
+        store(6, 20);
+    endif;
+    
+    alias currdatablock S9;
+    
+    currdatablock = [blockIndex];
+    load (1, currdatablock);
+    [512 + (seekpos % 512)] = wordtp;
+    
+    store(1, currdatablock);
+endif;
+
+[currpcb + 16 + 2 * fileDes] = [currpcb + 16 + 2 * fileDes] + 1;
+[physicalSP - 2] = 0;
+ireturn;

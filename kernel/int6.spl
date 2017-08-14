@@ -1,0 +1,117 @@
+alias physicalSP S0;
+alias fileFatIndex S1;
+alias fileName S2;
+
+physicalSP = [PTBR + 2 * (SP / 512)] * 512 + SP % 512;
+
+if ([physicalSP - 1] == 9) then //Exec system call.
+   fileName = [physicalSP - 3];
+   
+   //Step 1
+   //Search for the file in FAT.
+   fileFatIndex = 0;
+   
+   while (fileFatIndex < 64) do
+      if ([FAT + fileFatIndex * 8] == fileName) then
+         break;
+      endif;
+      
+      fileFatIndex = fileFatIndex + 1;
+   endwhile;
+   
+   if (fileFatIndex == 64) then
+      //There is no file with the specified file name.
+      [physicalSP - 2] = -1;
+      ireturn;
+   endif;
+   
+   if ([FAT + fileFatIndex * 8 + 1] > 1536) then
+      //File too large to fit in memory.
+      [physicalSP - 2] = -1;
+      ireturn;
+   endif;
+   
+   //Got the filename, need to load the basic block into the scratchpad.
+   load (1, [FAT + fileFatIndex * 8 + 2]);
+   
+   //More local variables.
+   alias requiredPages S3;
+   alias i S4;
+   alias j S5;
+   //Count the required number of blocks.
+   //Let us do some magic here.
+   requiredPages = 3;
+   
+   //Again local variables.
+   alias currPages S8;
+   currPages = 0;
+   
+   //Count current number of pages.
+   i = 0;
+   while (i < 3) do
+      j = PTBR + 2 * i;
+      if ([j + 1] == "01" || [j + 1] == "11") then
+         [MEM_LIST + [j]] = [MEM_LIST + [j - 1]];
+      else
+         if ([j] > 447) then
+            [DISK_LIST + [j]] = [DISK_LIST + [j]] - 1;
+         endif;
+      endif;
+      
+      i = i + 1;
+   endwhile;
+   
+   store(6, 20); //Commit those changes to disk.
+   
+   
+   //Set up the page table.
+   i = 0;
+   
+   while (i < 3) do
+      [PTBR + 2 * i] = [512 + i];
+      [PTBR + 2 * i + 1] = "00";
+   endwhile;
+      
+   //Close all the open file.
+   alias currPrFileTable S6;
+   
+   currPrFileTable = (PTBR - 1024) / 8; //Now this has the PID.
+   currPrFileTable = READY_LIST + 32 * currPrFileTable + 15;
+   
+   i = 0;
+   alias currSWOF S7;
+  
+   while (i < 8) do
+      currSWOF = currPrFileTable + 2 * i;
+      if ([currSWOF] != -1) then
+         //Then it contains pointer to the system wide open file table.
+         [FILE_TABLE + 2 * [currSWOF] + 1] = [FILE_TABLE + 2 * [currSWOF] + 1] - 1;
+         
+         if ([FILE_TABLE + 2 * [currSWOF] + 1] == 0) then
+            [FILE_TABLE + 2 * [currSWOF]] = -1; //The entry is no more valid.
+         endif;
+      endif;
+      
+      [currSWOF] = -1; //Now close the file.
+      i = i + 1;
+   endwhile;
+   
+   SP = 3 * 512 + 1;
+   [[PTBR + 2 * (SP / 512)] * 512 + SP % 512] = 0;
+   
+   //And now we are done.
+   ireturn;
+endif;
+
+alias currPID S1;
+
+currPID = (PTBR - 1024) / 8; //getpid
+if ([physicalSP - 1] == 11) then
+   [physicalSP - 2] = currPID;
+   ireturn;
+endif;
+
+if ([physicalSP - 1] == 12) then //getppid
+   [physicalSP - 2] = [READY_LIST + 32 * currPID + 31];
+   ireturn;
+endif;

@@ -1,0 +1,67 @@
+alias currentPID S0;
+
+currentPID = (PTBR - 1024) / 8;
+
+alias currentPCB S1;
+
+currentPCB = READY_LIST + 32 * currentPID;
+if ([currentPCB + 1] == 2) then
+   [currentPCB + 1] = 1; //READY
+endif;
+
+alias physicalSP S2;
+
+if ([currentPCB + 1] != 0) then
+   //Let us not waste time doing post mortem.
+
+   [currentPCB + 2] = BP;
+   [currentPCB + 3] = SP - 1;
+
+   physicalSP = [PTBR + 2 * (SP / 512)] * 512 + (SP % 512);
+
+   //Instruction pointer.
+   [currentPCB + 4] = [ physicalSP ];
+   [currentPCB + 5] = PTBR;
+   [currentPCB + 6] = PTLR;
+   [currentPCB + 7] = R0;
+   [currentPCB + 8] = R1;
+   [currentPCB + 9] = R2;
+   [currentPCB + 10] = R3;
+   [currentPCB + 11] = R4;
+   [currentPCB + 12] = R5;
+   [currentPCB + 13] = R6;
+   [currentPCB + 14] = R7;
+endif;
+
+alias nextPID S3;
+
+nextPID = (currentPID + 1) % 32;
+
+while ([READY_LIST + 32 * nextPID + 1] != 1) do
+   nextPID = (nextPID + 1) % 32;
+endwhile;
+
+//Update currentPCB.
+currentPCB = READY_LIST + 32 * nextPID;
+[currentPCB + 1] = 2; //Running.
+BP = [currentPCB + 2];
+SP = [currentPCB + 3];
+
+//IP can not be directly modified.
+PTBR = [currentPCB + 5];
+PTLR = [currentPCB + 6];
+
+//The registers reloaded.
+R0 = [currentPCB + 7];
+R1 = [currentPCB + 8];
+R2 = [currentPCB + 9];
+R3 = [currentPCB + 10];
+R4 = [currentPCB + 11];
+R5 = [currentPCB + 12];
+R6 = [currentPCB + 13];
+R7 = [currentPCB + 14];
+
+SP = SP + 1;
+physicalSP = [PTBR + 2 * (SP / 512)] * 512 + (SP % 512);
+[physicalSP] = [currentPCB + 4];
+ireturn;

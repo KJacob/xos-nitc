@@ -1,0 +1,43 @@
+//Loading exception handler
+//print("Loadng xhndlr");
+load(7,1);
+load(8,2);
+
+//Loading interrupt 1 routine
+load (11, 5);
+load (12, 6);
+
+//Loading interrupt 7 routine
+//print("Loading int7");
+load(23,17);
+load(24,18);
+
+//Loading timer interrupt
+load (9, 3);
+load (10, 4);
+
+[READY_LIST + 0] = 0;
+//Loading the INIT
+//print("Loading INIT");
+load(25,21);
+load(26,22);
+load(27,23);
+
+//print("Setting up PT");
+PTBR=1024;
+PTLR=4;
+
+[PTBR + 0]=25;
+[PTBR + 1]="01";
+[PTBR + 2]=26;
+[PTBR + 3]="01";
+[PTBR + 4]=27;
+[PTBR + 5]="01";
+[PTBR + 6]=28;//STACK
+[PTBR + 7]="01";
+
+[READY_LIST + 1]=2;//sets STATE as running
+SP=3*512;
+
+[28*512]=0;
+ireturn;

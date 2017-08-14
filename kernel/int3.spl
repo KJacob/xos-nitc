@@ -1,0 +1,73 @@
+alias physicalSP S0;
+alias currpcb S1;
+alias fileDes S2;
+alias seekpos S4;
+alias syswidept S5; //System wide pointer.
+alias basicBlock S6;
+alias blockIndex S7;
+
+physicalSP = ([PTBR + 2 * (SP / 512)] * 512) + SP % 512;
+
+//By substitution.
+currpcb = (PTBR - 1024) * 4 + 1536;
+fileDes = [physicalSP - 4];
+
+if (fileDes > 7  || fileDes < 0) then
+    [physicalSP - 2] = -1;
+    ireturn;
+endif;
+    
+if ([currpcb + 15 + 2 * fileDes] == -1) then
+    [physicalSP - 2] = -1;
+    ireturn;
+endif;
+
+syswidept = [currpcb + 15 + 2 * fileDes];
+syswidept = FILE_TABLE + 2 * syswidept;
+
+seekpos = [currpcb + 16 + 2 * fileDes];
+basicBlock = [FAT + 8 * [syswidept] + 2];
+load (1, basicBlock);
+
+blockIndex = 512 + (seekpos / 512);
+
+//Read system call
+if ([physicalSP - 1] == 7) then
+    if (seekpos >= [FAT + 8 * [syswidept] + 1]) then
+        // Can't read anything, we are at the end of file.
+        [physicalSP - 2] = -1;
+        ireturn;
+    endif;
+    
+    alias currentBlock S3;
+    
+  // Get the current block.
+    currentBlock = [blockIndex];
+    load (1, currentBlock);
+    
+    // Update the location pointed to by the argument.
+    [physicalSP - 3] = [512 + (seekpos) % 512];
+    
+    //Update the seek position. 
+    [currpcb + 16 + 2 * fileDes] = [currpcb + 16 + 2 * fileDes] + 1;
+    [physicalSP - 2] = 0;
+    ireturn;
+endif;
+
+//Seek operation.
+if ([physicalSP - 1] == 6) then
+	alias lseek S3;
+	
+	lseek = [physicalSP - 3];
+	
+	if (lseek >= [FAT + 8 * [syswidept] + 1]) then
+		// Seek position is greater than file size.
+		[physicalSP - 2] = -1;
+		ireturn;
+	endif;
+	
+	//Otherwise update the seek position.
+	[currpcb + 16 + 2 * fileDes] = lseek;
+	[physicalSP - 2] = 0;
+	ireturn;
+endif;

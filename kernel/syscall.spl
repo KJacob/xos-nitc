@@ -1,0 +1,150 @@
+alias physicalSP S0;
+physicalSP = [PTBR + 2 * (SP / 512)] * 512 + SP % 512;
+
+alias syscallNumber S1;
+
+syscallNumber = [physicalSP - 1];
+
+alias freeblock S2;
+freeblock = 24;
+
+alias filename S3;
+filename = [physicalSP - 3];
+
+alias currfatEntry S4;	
+currfatEntry = 0;
+
+//Create
+if (syscallNumber == 1) then	
+	while (freeblock < 448) do
+		//3072 -- sixth page
+		if ([3072 + freeblock] == 0) then
+			break;
+		endif;
+		
+		freeblock = freeblock + 1;
+	endwhile;
+	
+	if (freeblock == 448) then //No matches.
+		[physicalSP - 2] = -1;
+		ireturn;
+	endif;
+		
+	//Isn't this misplaced?
+	while (currfatEntry < 64) do
+		if ([FAT + 8 * currfatEntry] == filename) then
+			[physicalSP - 2] = 0; //Nothing to do. File exists.
+			ireturn;
+		endif;
+		
+		currfatEntry = currfatEntry + 1;
+	endwhile;
+	
+	currfatEntry = 0;
+	
+	while(currfatEntry < 64) do
+		if ([FAT + 8 * currfatEntry + 2] == -1) then
+			break;
+		endif;
+		
+		currfatEntry = currfatEntry + 1;
+	endwhile;
+	
+	if (currfatEntry == 64) then
+		[physicalSP - 2] = -1;
+		ireturn;
+	endif;
+	
+	//Found a free block.
+	alias fatPointer S6;
+	
+	fatPointer = FAT + currfatEntry * 8;
+	[fatPointer] = filename;
+	[fatPointer + 1] = 0; //Size
+	[fatPointer + 2] = freeblock;
+	
+	//Load the scratchpad.
+	load(1, freeblock);
+	
+	alias counter S5;
+	
+	counter = 0;
+	
+	while (counter < 512) do
+		[512 + counter] = -1;
+		counter = counter + 1;
+	endwhile;
+	
+	//Store the scratchpad.
+	store(1, freeblock);
+	
+	//Used.
+	[3072 + freeblock] = 1;
+	
+	//Update disk free list.
+	store(6, 20);
+	
+	//Update the file allocation table.
+	store(5, 19);
+	
+	[physicalSP - 2] = 0;
+	ireturn;
+endif;
+	
+//Delete system call
+if (syscallNumber == 4) then
+	while (currfatEntry < 64) do
+		if ([FAT + 8 * currfatEntry] == filename) then
+			//Complete.
+			break;
+		endif;
+		
+		currfatEntry = currfatEntry + 1;
+	endwhile;
+	
+	if (currfatEntry == 64) then
+		[physicalSP - 2] = -1;
+		ireturn;
+	endif;
+	
+	alias syswideIndex S5;
+	syswideIndex = FILE_TABLE;
+	
+	while (syswideIndex < FILE_TABLE + 128) do
+		if ([syswideIndex] == currfatEntry) then
+			[physicalSP - 2] = -1;
+			ireturn;
+		endif;
+		
+		syswideIndex = syswideIndex + 2;
+	endwhile;
+	
+	alias basicBlock S5;
+	
+	basicBlock = [FAT + 8 * currfatEntry + 2];
+	load (1, basicBlock); //Load the basic block to scratchpad.
+	
+	alias counter S6;
+	counter = 0;
+	
+	while (counter < 256) do
+		if ([512 + counter] >= 0) then
+			[DISK_LIST + [512 + counter]] = 0;
+		endif;
+		
+		counter = counter + 1;
+	endwhile;
+	
+	[DISK_LIST + basicBlock] = 0;
+	
+	//Sync disk free list.
+	store(6, 20);
+	
+	[FAT + 8 * currfatEntry] = -1;
+	[FAT + 8 * currfatEntry + 1] = 0;
+	[FAT + 8 * currfatEntry + 2] = -1;
+	
+	store(5, 19);
+	[physicalSP - 2] = 0;
+	ireturn;
+endif;

@@ -1,0 +1,9 @@
+alias i S0;
+alias n S1;
+read n;
+i=1;
+while(i<=n) do 
+	print i;
+	i=i+2;
+endwhile;
+

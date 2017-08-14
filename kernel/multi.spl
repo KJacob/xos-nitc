@@ -1,0 +1,67 @@
+//Loading exception handler
+//print("Loadng xhndlr");
+load(7,1);
+load(8,2);
+
+//Loading interrupt 1 routine
+load (11, 5);
+load (12, 6);
+
+//Loading interrupt 7 routine
+//print("Loading int7");
+load(23,17);
+load(24,18);
+
+//Loading timer interrupt
+load (9, 3);
+load (10, 4);
+
+[READY_LIST + 0] = 0;
+//Loading the INIT
+//print("Loading INIT");
+load(25,21);
+load(26,22);
+load(27,23);
+
+[READY_LIST + 32] = 1;
+//loading the second program
+load(29,25);//as 28 is used as stack of init
+
+//print("Setting up PT");//of INIT
+PTBR=1024;
+PTLR=4;
+
+[PTBR + 0]=25;
+[PTBR + 1]="01";
+[PTBR + 2]=26;
+[PTBR + 3]="01";
+[PTBR + 4]=27;
+[PTBR + 5]="01";
+[PTBR + 6]=28;//STACK 
+[PTBR + 7]="01";
+
+
+//Setting up page table of second program
+alias PTBR_process1 S0;
+PTBR_process1 = 1024 + 1*8;
+[PTBR_process1 + 0] = 29;
+[PTBR_process1 + 1] = "01";
+[PTBR_process1 + 2] = -1;
+[PTBR_process1 + 3] = "00";
+[PTBR_process1 + 4] = -1;
+[PTBR_process1 + 5] = "00";
+[PTBR_process1 + 6] = 30;//Stack
+[PTBR_process1 + 7] = "01";
+
+[READY_LIST + 1]=2;//sets STATE of INIT as running
+SP=3*512;
+
+[28*512]=0;
+
+[READY_LIST + 33] = 1;//state (of 2nd program) as ready
+[READY_LIST + 37] = PTBR_process1;//PTBR (of 2nd)
+[READY_LIST + 38] = 4;//PTLR (of 2nd)
+[READY_LIST + 34] = 3*512;//Logical page number 3;BP (of 2nd )
+[READY_LIST + 35] = 3*512;//SP (of 2nd)
+[READY_LIST + 36] = 0;//IP to Logical address 0 (of 2nd)
+ireturn;

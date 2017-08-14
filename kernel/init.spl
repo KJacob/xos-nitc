@@ -1,0 +1,104 @@
+//Loading exception handler
+//print("Loadng xhndlr");
+load(7,1);
+load(8,2);
+
+//Loading interrupt 7 routine
+//print("Loading int7");
+load(23,17);
+load(24,18);
+
+//Timer interrupt
+load(9, 3);
+load(10, 4);
+//Loading system call interrupts
+load(11,5);
+load(12,6);
+
+load(13, 7);
+load(14, 8);
+
+load(15, 9);
+load(16, 10);
+
+load(17, 11);
+load(18, 12);
+
+//Interrupts 5, 6 and 7
+load (19, 13);
+load (20, 14);
+load (21, 15);
+load (22, 16);
+load (23, 17);
+load (24, 18);
+
+//Loading the FAT
+load(5,19);
+load(6,20);
+
+[READY_LIST + 0] = 0;
+
+//print("Setting up PT");
+PTBR=1024;
+PTLR=4;
+
+//Give them the block addresses, may the exception handler be peaceful to us!
+[PTBR + 0]=21;
+[PTBR + 1]="00"; //Not referenced and not valid. Ex nihilo, nihil fit.
+[PTBR + 2]=22;
+[PTBR + 3]="00";
+[PTBR + 4]=23;
+[PTBR + 5]="00";
+[PTBR + 6]=28;//STACK
+[PTBR + 7]="01";
+
+[READY_LIST + 1]=2;//sets STATE as running
+SP=3*512;
+
+[28*512]=0;//set the value at the top of the stack to 0
+
+alias counter S0;
+
+counter = 0;
+
+//Set system wide file table to default values.
+while (counter < 128) do
+	[FILE_TABLE + counter + 0] = -1;
+	[FILE_TABLE + counter + 1] = 0;
+	counter = counter + 2;
+endwhile;
+
+//Set all Per-process open file table to invalid.
+
+counter = 15;
+
+while (counter < 30) do
+	[READY_LIST + counter] = -1;
+	[READY_LIST + counter + 1] = 0;
+
+	counter = counter + 2;
+endwhile; 
+
+//Initialize memory free list.
+counter = 0;
+
+while (counter < 29) do
+    [MEM_LIST + counter] = 1;
+    counter = counter + 1;
+endwhile;
+
+while (counter < 63) do
+    [MEM_LIST + counter] = 0;
+    counter = counter + 1;
+endwhile;
+
+//Initialize all PCB  states.
+counter = 0;
+
+while (counter < 32) do
+    [READY_LIST + 32 * counter + 1] = 0;
+    counter = counter + 1;
+endwhile;
+
+[READY_LIST + 1] = 2;
+ireturn;

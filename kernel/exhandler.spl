@@ -1,0 +1,97 @@
+alias Cause S0;
+alias VPageNum S1;
+alias Ip_addr S2;
+alias i S3;
+alias j S4;
+alias FreePage S5;
+
+//Calculate values.
+Cause = EFR % 10;
+VPageNum = (EFR / 10) % 100;
+Ip_addr = (EFR / 1000);
+
+if (Cause != 0) then
+   //Not a page fault. Terminate.
+   inline "JMP 4608";
+endif;
+
+if ([PTBR + 2 * VPageNum] == -1) then
+   //This is blasphemy, this is madness!
+   inline "JMP 4608";
+endif;
+
+FreePage = 29;
+
+while (FreePage < 64) do
+   if ([MEM_LIST + FreePage] == 0) then
+      break;
+   endif;
+endwhile;
+
+if (FreePage == 64) then
+
+   i=(PTBR - PAGE_TABLE) / 2; //The scanning starts from the current PTBR
+
+   while (1 == 1) do //Search all PTBR entries.
+      if ((i + 1) % 4 == 0) then
+         continue; //Stack page, skip.
+      endif;
+   
+      if ([MEM_LIST + [PAGE_TABLE + 2 * i]] > 1) then
+         continue; //Shared page, do not replace.
+      endif;
+      
+      if ([PAGE_TABLE + 2 * i + 1] == "11") then
+         [PAGE_TABLE + 2 * i + 1] = "01";
+      endif;
+      
+      if ([PAGE_TABLE + 2 * i + 1] == "01") then
+         alias k S6;
+      
+         k = 448;
+         
+         while (k < 512) do
+            if ([DISK_LIST + k] == 0) then
+               break;
+            endif;
+            
+            k = k + 1;
+         endwhile;
+         
+         if (k == 512) then
+            //No free blocks. Kill the process.
+            inline "JMP 4608";
+         endif;
+         
+         store([PAGE_TABLE + 2 * i], k);
+         [DISK_LIST + k] = 1;
+         [PAGE_TABLE + 2 * i] = k;
+         [PAGE_TABLE + 2 * i + 1] = "00";
+         
+         FreePage = k;
+         break;
+      endif;
+      
+      i = (i + 1) % 128;   
+   endwhile;
+endif;
+
+alias PhysicalPage S6;
+
+PhysicalPage = [PTBR + 2 * VPageNum];
+
+if (PhysicalPage > 447) then
+   //Swap.
+   [DISK_LIST + PhysicalPage] = [DISK_LIST + PhysicalPage] - 1;
+endif;
+
+[PTBR + 2 * VPageNum] = FreePage;
+[PTBR + 2 * VPageNum + 1] = "11";
+
+SP = SP + 1;
+
+alias PhysicalSP S7;
+
+PhysicalSP = [PTBR + 2 * (SP / 512)] * 512 + (SP % 512);
+[PhysicalSP] = Ip_addr;
+ireturn;

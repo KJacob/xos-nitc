@@ -1,0 +1,120 @@
+alias sysCallNo S0;
+alias physicalSP S1;
+alias curr_pcb S6;
+
+curr_pcb = (PTBR - 1024) * 4 + 1536; // = (PTBR - 1024) / 8 * 32 + 1536
+
+physicalSP = ([PTBR + 2 * (SP / 512)] * 512) + SP % 512;
+sysCallNo = [physicalSP - 1];
+
+//Open system call
+if (sysCallNo == 2) then
+	alias fatEntry S2;
+	alias fileName S3;
+	alias counter S4;
+	alias freeTableEntry S5;
+
+	fatEntry = FAT;
+	fileName = [physicalSP - 3];
+
+	while (fatEntry < FAT + 512) do
+		if ([fatEntry] == fileName) then
+			break;
+		endif;
+		
+		fatEntry = fatEntry + 8;
+	endwhile;
+	
+	if (fatEntry == FAT + 512) then //No matches. Fail.
+		[physicalSP - 2] = -1;
+		ireturn;
+	endif;
+	
+	fatEntry = (fatEntry - FAT) / 8; //Normalize
+	
+	counter = 0;
+	
+	freeTableEntry = -1;
+	while (counter < 128) do
+		if ([FILE_TABLE + counter] == fatEntry) then
+			break;
+		endif;
+		
+		if ([FILE_TABLE + counter] == -1) then
+			freeTableEntry = counter;
+		endif;
+		
+		counter = counter + 2;
+	endwhile;
+	
+	if (counter == 128) then
+		if (freeTableEntry < 0) then
+			[physicalSP - 2] = -1;
+			ireturn;
+		endif;
+		
+		counter = freeTableEntry;
+	endif;
+	
+	alias counter2 S7;
+	counter2 = 15;
+	
+	while (counter2 < 30) do
+		if ([curr_pcb + counter2] == -1) then
+			break;
+		endif;
+		
+		counter2 = counter2 + 2;
+	endwhile;
+	
+	if (counter2 == 31) then
+		[physicalSP - 2] = -1;
+		ireturn;
+	endif;
+	
+	[curr_pcb + counter2] = counter / 2;
+	[curr_pcb + counter2 + 1] = 0;
+	
+	[FILE_TABLE + counter] = fatEntry;
+	[FILE_TABLE + counter + 1] = [counter + 1] + 1; //Increase reference count
+	
+	[physicalSP - 2] = (counter2 - 15) / 2;
+	ireturn;
+endif;
+
+//Close system call
+if (sysCallNo == 3) then
+	alias fileDes S2;
+	alias syswideIndex S3;
+	
+	//Get the only argument.
+	fileDes = [physicalSP - 3];
+	
+	if (fileDes < 0 || fileDes > 7) then
+		//Failed.
+		[physicalSP - 2] = -1;
+		ireturn;
+	endif;
+	
+	if ([curr_pcb + 15 + 2 * fileDes] == -1) then
+		[physicalSP - 2] = -1;
+		ireturn;
+	endif;
+	
+	// Update the System Wide Open table.
+	
+	syswideIndex = [curr_pcb + 15 + fileDes];
+	syswideIndex = FILE_TABLE + 2 * syswideIndex;
+	
+	[syswideIndex + 1] = [syswideIndex + 1] - 1;
+	
+	if ([syswideIndex + 1] == 0) then
+		[syswideIndex] = -1;
+	endif;
+	
+	//Set per process file open table entry to invalid.
+	[curr_pcb + 15 + 2 * fileDes] = -1;
+	
+	[physicalSP - 2] = 0;
+	ireturn;
+endif;
